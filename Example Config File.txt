@@ -1,0 +1,20 @@
+{
+  "Settings": [
+	{
+	  "username" : "webreports_username",
+	  "password" : "webreports_password",
+	  "webreports_server" : "https://bfweb-int.stanford.edu",
+	  "returns" : ["return1", "return2", "return3"],
+	  "log_path" : "C:\Users\Username\Desktop",
+	  "output_path" : "C:\Users\Username\Desktop\Folder"
+	},
+	{
+	  "filters": {
+		  "Filter1" : ["OS", "contains", "Win" ],
+		  "Filter2" : ["OS", "does not contain", "XP" ],
+		  "Filter3" : ["OS", "does not contain", "2003" ],
+		  "Filter4" : ["OS", "does not contain", "2008" ]
+		}
+	}
+   ]
+}
