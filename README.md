@@ -1,5 +1,5 @@
 # EmetEventExtractor
-This script retrieves EMET triggered mitigations using BAM functions, stores them, deduplicates them, and writes them to a file. The file can then be ingested using Splunk's Universal Forwarder.
+This script retrieves EMET triggered mitigations using BAM functions, stores them, deduplicates them, and writes them to a file. The file can then be ingested using Splunk's Universal Forwarder. It is currently scheduled to run hourly during weekdays, automatically updating the output file's events.
 
 ## Cool Features
 
