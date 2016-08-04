@@ -1,12 +1,17 @@
 from BAM import soap_query, relevance_query
 from datetime import timedelta
 from time import clock
+import datetime
 import json
 import sys
 import os
 
+global log_file
+global output_file
+
 class events:
 
+	# Initializing all class variables
     username = ""
     password = ""
     server = ""
@@ -15,46 +20,86 @@ class events:
     filter = []
     returns = []
     webreports_events = []
+    debug = ""
     
-    def __init__(self, new_user, new_pass, new_server, new_filter, new_returns, new_output_path):
+    def __init__(self):
         '''
         Assigns webreports credentials and filter value to global variables for later use.
         '''
-        self.username = new_user
-        self.password = new_pass
-        self.server = new_server
-        self.filter = new_filter
-        self.returns = new_returns
-        self.output_path = new_output_path
+        global log_file
+        global output_file
+        log_path = ""
+        output_path = ""
+
+		# Try to retrieve config file as passed argument
+		# If this fails, print out appropriate error
+        try:
+            config_file =  sys.argv[1]
+            try:
+                open(config_file, "r")
+            except IOError:
+                print "No valid config filepath found."
+        except IOError:
+            print "No config filepath argument found."
+
+        # Getting credentials from config file (JSON)
+        with open(config_file, "r") as data_file:
+            data = json.load(data_file)
+        self.username = data["Settings"][0]["username"] 
+        self.password = data["Settings"][0]["password"] 
+        self.server = data["Settings"][0]["webreports_server"]
+        self.returns = data["Settings"][0]["returns"]
+        self.log_path = data["Settings"][0]["log_path"]
+        self.output_path = data["Settings"][0]["output_path"]
+        self.filter = data["Settings"][1]["filters"].values()
+        self.debug = data["Settings"][0]["debug"].lower()
+
+        #Create Default to local ouput and log paths
+        if (self.log_path == ""):
+            local_path = os.path.dirname(os.path.abspath(__file__))
+            self.log_path = os.path.join(local_path, "EMETEventExtractor-Logs.log")
+        if (self.output_path == ""):
+            local_path = os.path.dirname(os.path.abspath(__file__))
+            self.output_path = os.path.join(local_path, "Emet-Events.csv")
+
+        # Opening Logs
+        log_file = open(self.log_path, 'a', 0)
+        current_time = datetime.datetime.now()
+        log_file.write("  LOG TIME: %s \n" %current_time)
+        # Print to Logs if debug is on
+        if (debug == "true"):
+            log_file.write("DEBUG : ON")
 
     def get_webreports_events(self):
         '''
         Pulls recent emet events from webreports based on filter.
         '''
 
-        #Create Emet Return and Search properties
-        #Optional EMET Timeframe Settings: Emet Triggered Mitigations for (2 hours, 30 days, a year)
-        f.write("<get_webreports_events> : <expecting username and password to webreports> \n")
+        # Create Emet Return and Search properties
+        # Optional EMET Timeframe Settings: Emet Triggered Mitigations for (2 hours, 30 days, a year)
+        log_file.write("<get_webreports_events> : <Expecting username and password to webreports> \n")
         search = "computers"
 
-        #Create relevance query and fetch results
-        f.write("<get_webreports_events> : <creating query> \n")
+        # Create relevance query and fetch results
+        log_file.write("<get_webreports_events> : <Creating query> \n")
         query = relevance_query(self.returns, self.filter, search)
-        f.write("<get_webreports_events> : <getting query results> \n")
+        log_file.write("<get_webreports_events> : <Getting query results> \n")
         results = soap_query(self.username, self.password, self.server, query.Query)
-
-        #Save webreports_events as dictionary
+		log_file.write("<get_webreports_events> : <Results successfully read in.> \n")
+        # Save webreports_events as dictionary
         end_time = clock()
-        string = "<get_webreports_events> : <now saving into webreports_events and exiting. %s> \n" % (timedelta(seconds = end_time - start_time))
-        f.write(string)
+        string = "<get_webreports_events> : <Now saving into webreports_events and exiting. %s> \n" % (timedelta(seconds = end_time - start_time))
+        log_file.write(string)
         self.webreports_events = self.webreports_parse(results)
-		
-        # Troubleshooting code to check BFWR!
-        # webreports_results_file = open("webreports_return.txt", "w")
-        # for line in results:
-        #    webreports_results_file.write(line.encode("utf-8"))
-        #    webreports_results_file.write("\n")
-		
+
+        # If debug is on, write a return of the webreports results
+        if (debug == "true"):
+            log_file.write("<get_webreports_events> : <DEBUG> : <Writing out webreports results to \"webreports_return.txt\" in local filepath.> \n")
+            webreports_results_file = open("webreports_return.txt", "w")
+            for line in results:
+               webreports_results_file.write(line.encode("utf-8"))
+               webreports_results_file.write("\n")
+
     def webreports_parse(self, results):
         '''
         Takes results from a query to webreports, and holds each result in a dictionary,
@@ -62,18 +107,19 @@ class events:
         Expects a list of results.
         ''' 
         
-        f.write("<webreports_parse> : <expecting results>\n")
+        log_file.write("<webreports_parse> : <Expecting results>\n")
         answer = []
         dict = {}
         
-        f.write("<webreports_parse> : <now parsing results> \n")
-        #Begin parsing into dictionary form
+        log_file.write("<webreports_parse> : <Now parsing results> \n")
+        # Begin parsing into dictionary form
         for count in range(0, len(results)):
             new_events = results[count]
-            # Find number of Emet values by bar count, and start parsing the EMET key/values
-            num_properties = new_events.count("|")
-            # Remove leading "(" and first comma in EMET TIME value
             
+			# Find number of Emet values by bar count, and start parsing the EMET key/values
+            num_properties = new_events.count("|")
+			
+            # Remove leading "(" and first comma in EMET TIME value
             if (new_events.find("TIME|") != -1):
                 new_events = new_events.replace(",", "", 1).replace("( ", "", 1)
             else:
@@ -129,9 +175,11 @@ class events:
             answer.append(dict.copy())
             dict.clear()
 
+		# Update log/function time before exiting
         end_time = clock()
         string = "<webreports_parse> : <Now returning answer and exiting. %s> \n" % (timedelta(seconds = end_time - start_time))
-        f.write(string)
+        log_file.write(string)
+
         self.webreports_events = answer
         return answer
 
@@ -140,106 +188,110 @@ class events:
         Deduplicates and pushes events in webreports_events in key value pairs to a file.
         '''
 
-        f.write("<push_events> : <Entering push_events function. Preparing to create event strings.> \n")
+        log_file.write("<push_events> : <Entering push_events function. Preparing to create event strings.> \n")
+		
         # Get a list of string-ified key, value events
-        webreports_events = []
+        string_of_events = []
         temp_string = ""
         for event in self.webreports_events:
 			try:
-				#Place time value in first position
+				# Place time value in first position
 				if "TIME" in event:
-					temp_string += "TIME=%s, " % (event["TIME"])
-					for key in event:
-						if key != "TIME":
-								temp_string += "%s=%s, " % (key.encode("utf-8"), event[key].encode("utf-8"))
-					temp_string +="\n"
-					webreports_events.append(temp_string)
-					temp_string = ""
+					temp_string += "TIME=%s, " % (event["TIME"])]
+				# Place all other values in string
+				for key in event:
+					if key != "TIME":
+							temp_string += "%s=%s, " % (key.encode("utf-8"), event[key].encode("utf-8"))
+				temp_string +="\n"
+				string_of_events.append(temp_string)
+				temp_string = ""
 			except:
 					f.write("<push_events> : <UnicodeEncodeError: Could not encode or decode character.> \n")
 					f.write("<push_events> : <Event: %r.> \n" % event)
-		
-            
         
         # Deduplicate and order this list of events
-        webreports_events = sorted(set(webreports_events))
+        string_of_events = sorted(set(string_of_events))
 
-        f.write("<push_events> : <Opening file and reading in previous events.> \n")
+        log_file.write("<push_events> : <Opening file and reading in previous events.> \n")
+		
         # Pull a list of events from output file
-        splunk_file = open(self.output_path, "a")
-        splunk_file = open(self.output_path, "r")
+        output_file = open(self.output_path, "a")
+        output_file = open(self.output_path, "r")
         locally_cached_splunk_events = []
-        for line in splunk_file:
+        for line in output_file:
             locally_cached_splunk_events.append(line)
-
-        f.write("<push_events> : <Creating unique events and submitting into file.> \n")
-        # Find the events not yet in the output file
-        # Also cast list of file events to unicode so they can be compared with list of events
+			
+        # Decode cache of file events to utf-8, and sort so they can be compared with list of events
         for count in range(0, len(locally_cached_splunk_events)):
             locally_cached_splunk_events[count] = locally_cached_splunk_events[count].decode("utf-8")
-
+		
         locally_cached_splunk_events = sorted(set(locally_cached_splunk_events))
+			
+        log_file.write("<push_events> : <Creating unique events and submitting into file.> \n")
 
         # Get unique webreports events that are not in splunk cache
         unique_events = []
-        for event in webreports_events:
+        for event in string_of_events:
             if event not in locally_cached_splunk_events:
                 unique_events.append(event)
 
-        string = "<push_events> : <There are %s unique events that will be pushed to the \"Splunk Events\" file.> \n" % (len(unique_events))
-        f.write(string)
+        string = "<push_events> : <There are %s unique events that will be pushed to the output file.> \n" % (len(unique_events))
+        log_file.write(string)
+
+		# Open the output file
+		output_file = open(self.output_path, "a", 0)
 
         # Push unique_events
         for event in unique_events:
             event = event.encode("utf-8")
-            splunk_file = open(self.output_path, "a", 0)
-            splunk_file.write(event)
-        end_time = clock()
-        string = "<push_events> : <Exiting function. %s> \n" % (timedelta(seconds = end_time - start_time))
-        f.write(string)
+            output_file.write(event)
         
+		# Update log/function time before exiting
+		end_time = clock()
+        string = "<push_events> : <Exiting function. %s> \n" % (timedelta(seconds = end_time - start_time))
+        log_file.write(string)     
+
+    def clear_logs(self):
+        '''
+        Clears logs if they are more than 7 days old.
+        '''
+        # Open Log File
+        log = open(self.log_path, "r")
+
+        # Get content of Log File
+        log_content = []
+        for line in log:
+            log_content.append(line)
+
+        # Logs are written oldest to newest, if you hit anything newer than 7 days,
+        # keep all proceeding logs
+        counter = 0
+        for line in log_content:
+            if (line.find("  LOG TIME: ") != -1):
+                # Get Log times in datetime format
+                log_time = line.replace("  LOG TIME: ", "")
+                log_time = datetime.datetime.strptime(log_time, "%Y-%m-%d %H:%M:%S.%f ")
+                time_now = datetime.datetime.now()
+                # Test if these are less than 7 days old
+                difference = (time_now - log_time)
+                if (difference.days < 7):
+                    # If log time is less than 7 days old, stop here
+                    break
+            counter += 1
+
+        # Erase file, and only write events earlier than counter
+        log = open(self.log_path, "w")
+        for index in range(counter, len(log_content)):
+            log.write(log_content[index])
+
 start_time = clock()
-
-#Grab commandline argument for config filepath
-#Detect Errors if no filepath found or, or if incorrect filepath
-try:
-    config_file =  sys.argv[1]
-    try:
-        open(config_file, "r")
-    except IOError:
-        print "No valid config filepath found."
-except IOError:
-        print "No config filepath argument found."
-
-# Getting credentials from config file (JSON)
-with open(config_file, "r") as data_file:
-    data = json.load(data_file)
-username = data["Settings"][0]["username"] 
-password = data["Settings"][0]["password"] 
-webreports_server = data["Settings"][0]["webreports_server"]
-returns = data["Settings"][0]["returns"]
-log_path = data["Settings"][0]["log_path"]
-output_path = data["Settings"][0]["output_path"]
-filters = data["Settings"][1]["filters"].values()
-
-#Create Default ouput and log paths
-if (log_path == ""):
-	local_path = os.path.dirname(os.path.abspath(__file__))
-	log_path = os.path.join(local_path, "EMETEventExtractorLogs.log")
-if (output_path == ""):
-	local_path = os.path.dirname(os.path.abspath(__file__))
-	output_path = os.path.join(local_path, "EMET-Events.csv")
-
-# Clearing and opening Logs
-f = open(log_path, "w")
-f = open(log_path, "a", 0)
-
-### TESTING ###
-my_event = events(username, password, webreports_server, filters, returns, output_path)
+			
+### USAGE ###
+my_event = events()
 my_event.get_webreports_events()
 my_event.push_events()
+my_event.clear_logs()
 
 ## FINISHING ##
 end_time = clock()
-string = "Now exiting. Program time was: %s" % (timedelta(seconds = end_time - start_time))
-f.write(string)
+my_event.log_file.write("Now exiting. Program time was: %s \n\n" % (timedelta(seconds = end_time - start_time)))
